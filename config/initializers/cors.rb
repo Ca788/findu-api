@@ -8,10 +8,16 @@ allowed_origins = ENV.fetch("FRONTEND_ORIGIN", "")
   .map(&:strip)
   .reject(&:empty?)
 
-allowed_origins << %r{\Ahttps://[a-z0-9\-]+\.vercel\.app\z}
+unless Rails.env.production?
+  allowed_origins << %r{\Ahttps://[a-z0-9\-]+\.vercel\.app\z}
+end
 
 if Rails.env.development?
   allowed_origins.concat(%w[http://localhost:3000 http://localhost:5147])
+end
+
+if allowed_origins.empty?
+  Rails.logger.warn("[cors] No allowed origins configured. Set FRONTEND_ORIGIN or browser clients will be blocked.")
 end
 
 Rails.application.config.middleware.insert_before 0, Rack::Cors do

@@ -23,7 +23,8 @@ module ErrorMapper
     record_not_found: Error.new(404, "Record Not Found"),
     record_invalid: Error.new(1003, "Validation failed"),
     unauthorized: Error.new(1001, "Invalid credentials"),
-    missing_parameter: Error.new(1002, "Missing parameter")
+    missing_parameter: Error.new(1002, "Missing parameter"),
+    too_many_requests: Error.new(1004, "Too many requests")
   }.freeze
 
   ERRORS.each do |key, error|
