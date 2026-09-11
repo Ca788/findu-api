@@ -5,6 +5,7 @@ module Messaging
 
   class ProviderFactory
     SUPPORTED_PROVIDERS = %w[twilio whatsapp_cloud].freeze
+    INBOUND_CONTRACT    = %i[parse valid_signature?].freeze
 
     # @return [Messaging::Twilio::Provider, Messaging::WhatsappCloud::Provider]
     def self.build
@@ -19,6 +20,17 @@ module Messaging
         raise ConfigurationError,
               "Unsupported messaging provider: #{provider.inspect}. Supported: #{SUPPORTED_PROVIDERS.join(', ')}"
       end
+    end
+
+    # @return [Messaging::Twilio::Provider]
+    def self.build_inbound
+      provider = build
+      missing  = INBOUND_CONTRACT.reject { |method| provider.respond_to?(method) }
+      return provider if missing.empty?
+
+      raise ConfigurationError,
+            "MESSAGING_PROVIDER=#{ENV['MESSAGING_PROVIDER']} cannot receive messages: " \
+            "#{provider.class} does not implement #{missing.join(', ')}."
     end
 
     # Outbound receipts prefer Cloud API when configured, so the PDF is uploaded

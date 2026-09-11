@@ -17,7 +17,7 @@ module Api
         private
 
         def messaging_provider
-          Messaging::ProviderFactory.build
+          Messaging::ProviderFactory.build_inbound
         end
 
         def validate_signature
