@@ -293,6 +293,8 @@ GEM
     raabro (1.5.0)
     racc (1.8.1)
     rack (2.2.22)
+    rack-attack (6.8.0)
+      rack (>= 1.0, < 4)
     rack-cors (2.0.2)
       rack (>= 2.0.0)
     rack-test (2.2.0)
@@ -434,6 +436,7 @@ DEPENDENCIES
   prawn (~> 2.5)
   prawn-table (~> 0.2)
   puma (>= 5.0)
+  rack-attack (~> 6.7)
   rack-cors
   rails (~> 7.0.10)
   redis (~> 5.0)
