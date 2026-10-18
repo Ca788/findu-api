@@ -8,6 +8,16 @@ allowed_origins = ENV.fetch("FRONTEND_ORIGIN", "")
   .map(&:strip)
   .reject(&:empty?)
 
+# Capacitor WebView. Sem isso o APK faz OPTIONS em /login e o POST nunca sai.
+allowed_origins.concat(
+  %w[
+    https://localhost
+    http://localhost
+    capacitor://localhost
+    ionic://localhost
+  ]
+)
+
 unless Rails.env.production?
   allowed_origins << %r{\Ahttps://[a-z0-9\-]+\.vercel\.app\z}
 end
