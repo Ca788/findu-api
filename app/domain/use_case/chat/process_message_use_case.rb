@@ -120,7 +120,7 @@ class UseCase::Chat::ProcessMessageUseCase
     receipts = @receipt_extractor.call(message: message)
     receipts.filter_map do |receipt|
       next nil if receipt.confidence.to_f < RECEIPT_CONFIDENCE_THRESHOLD
-      next nil if receipt.amount.blank? && receipt.total_amount.blank? && receipt.monthly_amount.blank?
+      next nil unless usable_receipt_amount?(receipt)
 
       candidate = receipt_candidate(receipt)
       SideEffect.new(
@@ -171,10 +171,20 @@ class UseCase::Chat::ProcessMessageUseCase
     end
   end
 
+  def usable_receipt_amount?(receipt)
+    [receipt.amount, receipt.total_amount, receipt.monthly_amount].any? do |value|
+      amount = decimal_or_nil(value)
+      amount&.positive?
+    end
+  end
+
   def decimal_or_nil(value)
     return nil if value.blank?
 
-    value.to_d
+    amount = value.to_d
+    return nil if amount.zero?
+
+    amount
   rescue ArgumentError
     nil
   end

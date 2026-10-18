@@ -12,7 +12,7 @@ module V1
         field :audio_url do |message|
           next nil unless message.audio.attached?
 
-          Rails.application.routes.url_helpers.rails_blob_path(message.audio, only_path: true)
+          Rails.application.routes.url_helpers.rails_storage_proxy_path(message.audio, only_path: true)
         end
 
         field :attachments do |message|
