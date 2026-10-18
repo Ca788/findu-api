@@ -42,6 +42,14 @@ Rails.application.routes.draw do
           end
         end
 
+        resources :goals, only: [:index, :show, :create, :update, :destroy] do
+          member do
+            post :contribute
+          end
+        end
+
+        resources :investments, only: [:index, :show, :create, :update, :destroy]
+
         resources :receipts, only: [:index, :show, :create] do
           member do
             post :deliver

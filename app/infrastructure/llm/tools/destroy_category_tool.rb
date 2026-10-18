@@ -3,8 +3,10 @@
 module Llm
   module Tools
     class DestroyCategoryTool < BaseTool
-      description "Exclui uma categoria do usuário pelo id. Falha se houver transações associadas — " \
-                  "neste caso, peça ao usuário para reclassificar as transações primeiro."
+      description "Exclui uma categoria do usuário pelo id. " \
+                  "Falha se ainda houver parcelas em aberto ou lançamentos/recorrências que não sejam de parcelamento. " \
+                  "Categoria usada só em parcelamento pode ser excluída quando não restam parcelas pendentes " \
+                  "(o sistema também exclui sozinho nesse caso)."
 
       param :id, type: "string", desc: "UUID da categoria."
 

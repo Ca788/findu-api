@@ -39,5 +39,15 @@ RSpec.describe UseCase::Chat::BuildUserContextUseCase do
 
       expect(statement_use_case).to have_received(:call).twice
     end
+
+    it "records cache hit information when timings are provided" do
+      timings = {}
+      use_case.call(user: user, timings: timings)
+      expect(timings["context_cache_hit"]).to eq(false)
+
+      use_case.call(user: user, timings: timings)
+      expect(timings["context_cache_hit"]).to eq(true)
+      expect(timings["context_fingerprint_ms"]).to be_a(Integer)
+    end
   end
 end

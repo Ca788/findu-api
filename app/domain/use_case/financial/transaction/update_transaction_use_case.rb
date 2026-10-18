@@ -18,6 +18,8 @@ class UseCase::Financial::Transaction::UpdateTransactionUseCase
            occurred_at: nil, competency_month: nil, status: nil,
            category_id: nil, payer_name: nil, payer_phone: nil, metadata: nil)
     transaction = user.transactions.find(id)
+    previous_category_id = transaction.category_id
+    installment_related  = transaction.installment_plan_id.present?
 
     attributes = {
       amount:           amount,
@@ -38,11 +40,22 @@ class UseCase::Financial::Transaction::UpdateTransactionUseCase
     attributes[:category] = resolve_category(user, category_id) unless category_id.nil?
 
     transaction.update!(attributes)
+    released = release_installment_categories(user, transaction, previous_category_id, installment_related)
+    transaction.reload if released.present?
     transaction.budget_warnings = budget_warnings_for(transaction)
     transaction
   end
 
   private
+
+  def release_installment_categories(user, transaction, previous_category_id, installment_related)
+    return [] unless installment_related || transaction.installment_plan_id.present?
+
+    UseCase::Financial::Category::PurgeCategoryWithoutInstallmentsUseCase.new.call(
+      user:         user,
+      category_ids: [previous_category_id, transaction.category_id]
+    )
+  end
 
   def budget_warnings_for(transaction)
     return [] unless transaction.expense?

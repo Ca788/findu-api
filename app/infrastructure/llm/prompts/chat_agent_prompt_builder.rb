@@ -21,7 +21,10 @@ module Llm
           Criação:
             - register_transaction: registre despesa/receita quando o usuário citar valor
               (ex.: "gastei 50 no mercado", "recebi 2000 de salário").
-            - register_budget: defina orçamento quando ele pedir limite/budget/meta.
+            - register_budget: defina orçamento quando ele pedir limite de gastos ou budget de um período.
+            - register_goal: crie meta de economia (valor alvo, prazo). Não use para limite mensal de gastos.
+            - contribute_to_goal: some um aporte a uma meta já existente.
+            - register_investment: registre uma aplicação (tesouro, ações, fundo, cripto).
             - register_category: crie categoria quando ele pedir explicitamente, sem valor associado.
               Se houver valor, prefira register_transaction.
 
@@ -29,17 +32,21 @@ module Llm
             - list_transactions: lista transações com filtros opcionais (tipo, categoria, período, descrição).
             - list_categories: lista as categorias do usuário (use para descobrir o id de uma categoria).
             - list_budgets: lista orçamentos vigentes (padrão: hoje).
+            - list_goals: lista metas de economia, com progresso e quanto falta.
+            - list_investments: lista aplicações, com valor atual e rentabilidade.
 
           Edição:
             - update_transaction: corrige valor/tipo/descrição/data/categoria de uma transação pelo id.
             - update_category: renomeia uma categoria pelo id.
+            - update_investment: atualiza valor atual ou status (active/redeemed) de um investimento.
 
           Exclusão (sempre confirme com o usuário ANTES de chamar, citando o que será apagado):
             - destroy_transaction: apaga uma transação pelo id.
             - destroy_transactions_batch: apaga várias transações de uma vez (array de ids). Prefira
               esta tool em vez de chamar destroy_transaction repetidas vezes.
-            - destroy_category: apaga categoria pelo id (falha se houver transações associadas; nesse
-              caso peça para reclassificar/excluir as transações primeiro).
+            - destroy_category: apaga categoria pelo id. Falha se ainda houver parcelas em aberto ou
+              lançamentos/recorrências que não sejam de parcelamento. Categoria só de parcelamento
+              some sozinha quando não restam parcelas pendentes.
 
         Princípios de uso de ferramentas:
           - Antes de editar ou excluir, sempre busque o registro com a tool de listagem se você não
@@ -62,6 +69,8 @@ module Llm
           "DATA DE HOJE: #{context.reference_date.iso8601}",
           statement_section(context.statement),
           budgets_section(context.budgets),
+          goals_section(context.goals),
+          investments_section(context.investments),
           transactions_section(context.recent_transactions),
           side_facts_section(side_facts)
         ].compact
@@ -102,6 +111,29 @@ module Llm
         end
 
         "ORÇAMENTOS ATIVOS:\n#{lines.join("\n")}"
+      end
+
+      def goals_section(goals)
+        return "METAS ATIVAS: nenhuma meta de economia cadastrada." if goals.blank?
+
+        lines = goals.map do |goal|
+          deadline = goal.deadline.present? ? " até #{goal.deadline.strftime('%d/%m/%Y')}" : ""
+          "- #{goal.name}: #{Formatters::Brl.call(goal.current_amount)} de #{Formatters::Brl.call(goal.target_amount)} " \
+            "(#{goal.progress_percent}%), falta #{Formatters::Brl.call(goal.remaining_amount)}#{deadline}"
+        end
+
+        "METAS ATIVAS:\n#{lines.join("\n")}"
+      end
+
+      def investments_section(investments)
+        return "INVESTIMENTOS ATIVOS: nenhum investimento cadastrado." if investments.blank?
+
+        lines = investments.map do |investment|
+          "- #{investment.name} (#{investment.asset_type}): aplicado #{Formatters::Brl.call(investment.invested_amount)}, " \
+            "atual #{Formatters::Brl.call(investment.current_amount)} (#{investment.return_percent}%)"
+        end
+
+        "INVESTIMENTOS ATIVOS:\n#{lines.join("\n")}"
       end
 
       def transactions_section(transactions)

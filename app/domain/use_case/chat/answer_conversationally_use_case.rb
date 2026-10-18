@@ -24,16 +24,33 @@ class UseCase::Chat::AnswerConversationallyUseCase
   # @param [Chat::Message]
   # @param [Array<String>]
   # @param [Llm::Agents::Agent, nil]
+  # @param [Hash] timings
   # @return [Chat::Message]
-  def call(user_message:, side_facts: [], agent: nil)
+  def call(user_message:, side_facts: [], agent: nil, timings: {})
+    timings        = timings.stringify_keys
     user           = user_message.user
     selected_agent = agent || Llm::Agents::Registry::DEFAULT
     reply          = build_streaming_reply(user_message)
     models         = Llm::Models.prefer(user_message.conversation.model_id, "CHAT_AGENT_MODEL")
+    timings["model"] = models.first
 
-    context     = @context_builder.call(user: user)
-    system_text = @prompt_builder.call(context: context, side_facts: side_facts, agent: selected_agent)
-    history     = history_messages(user_message)
+    context, context_ms = Support::ChatPipelineTiming.measure(
+      "context",
+      message_id: user_message.id,
+      user_id:    user.id
+    ) { @context_builder.call(user: user, timings: timings) }
+    timings["context_ms"] = context_ms
+
+    system_text, prompt_ms = Support::ChatPipelineTiming.measure(
+      "prompt",
+      message_id: user_message.id,
+      user_id:    user.id
+    ) { @prompt_builder.call(context: context, side_facts: side_facts, agent: selected_agent) }
+    timings["prompt_ms"] = prompt_ms
+    timings["prompt_chars"] = system_text.to_s.length
+
+    history = history_messages(user_message)
+    timings["history_messages"] = history.size
     attachment_paths =
       if side_facts.any? { |fact| fact.to_s.include?("NÃO registrado") }
         []
@@ -42,24 +59,26 @@ class UseCase::Chat::AnswerConversationallyUseCase
       end
 
     final_body = Llm::ModelFallback.with_fallback(models) do |model|
+      timings["model"] = model
       chat = build_chat(model: model, system_text: system_text, history: history, user: user, agent: selected_agent)
       stream_response(
         chat: chat,
         user_message: user_message,
         reply: reply,
-        attachment_paths: attachment_paths
+        attachment_paths: attachment_paths,
+        timings: timings
       )
     end
 
-    finalize_reply(reply, body: final_body)
+    finalize_reply(reply, body: final_body, timings: timings)
     reply
   rescue RubyLLM::RateLimitError, StreamAlreadyStartedError => e
     Rails.logger.warn("[AnswerConversationallyUseCase] rate limit: #{e.message}")
-    finalize_reply(reply, body: RATE_LIMIT_BODY) if reply
+    finalize_reply(reply, body: RATE_LIMIT_BODY, timings: timings) if reply
     reply
   rescue StandardError => e
     Rails.logger.error("[AnswerConversationallyUseCase] #{e.class}: #{e.message}")
-    finalize_reply(reply, body: FALLBACK_BODY, error: { class: e.class.name, message: e.message }) if reply
+    finalize_reply(reply, body: FALLBACK_BODY, error: { class: e.class.name, message: e.message }, timings: timings) if reply
     reply
   end
 
@@ -96,13 +115,22 @@ class UseCase::Chat::AnswerConversationallyUseCase
                 .last(HISTORY_LIMIT)
   end
 
-  def stream_response(chat:, user_message:, reply:, attachment_paths: [])
+  def stream_response(chat:, user_message:, reply:, attachment_paths: [], timings: {})
     buffer        = +""
     flushed_upto  = 0
     last_flush_at = Time.current
+    gen_started   = Support::ChatPipelineTiming.monotonic
+    first_token_at = nil
+    tool_rounds    = 0
+
+    if chat.respond_to?(:on_tool_call)
+      chat.on_tool_call { tool_rounds += 1 }
+    end
 
     chat.ask(user_message.body.to_s, with: attachment_paths) do |chunk|
-      buffer << chunk.content.to_s
+      text = chunk.content.to_s
+      buffer << text
+      first_token_at ||= Support::ChatPipelineTiming.monotonic if text.present?
       now = Time.current
       pending = buffer.length - flushed_upto
       next unless pending >= STREAM_FLUSH_MIN_CHARS && (now - last_flush_at) >= STREAM_FLUSH_SECONDS
@@ -113,11 +141,30 @@ class UseCase::Chat::AnswerConversationallyUseCase
     end
 
     flush_delta!(reply, buffer, flushed_upto) if buffer.length > flushed_upto
+    record_generation_timings(timings, chat, gen_started, first_token_at, tool_rounds)
     buffer.presence || FALLBACK_BODY
   rescue RubyLLM::RateLimitError
+    record_generation_timings(timings, chat, gen_started, first_token_at, tool_rounds)
     raise if flushed_upto.zero?
 
     raise StreamAlreadyStartedError
+  end
+
+  def record_generation_timings(timings, chat, gen_started, first_token_at, tool_rounds)
+    timings["generation_ms"] = Support::ChatPipelineTiming.elapsed_ms(gen_started)
+    timings["ttft_ms"] = Support::ChatPipelineTiming.elapsed_ms(gen_started, ended: first_token_at) if first_token_at
+    timings["tool_rounds"] = tool_rounds
+    record_token_usage(timings, chat)
+  end
+
+  def record_token_usage(timings, chat)
+    return unless chat.respond_to?(:messages)
+
+    assistant = Array(chat.messages).reverse.find { |message| message.respond_to?(:role) && message.role.to_s == "assistant" }
+    return if assistant.nil?
+
+    timings["input_tokens"] = assistant.input_tokens if assistant.respond_to?(:input_tokens) && assistant.input_tokens
+    timings["output_tokens"] = assistant.output_tokens if assistant.respond_to?(:output_tokens) && assistant.output_tokens
   end
 
   def flush_delta!(reply, buffer, flushed_upto)
@@ -127,13 +174,20 @@ class UseCase::Chat::AnswerConversationallyUseCase
     reply.conversation.broadcast_delta!(reply.id, delta)
   end
 
-  def finalize_reply(reply, body:, error: nil)
+  def finalize_reply(reply, body:, error: nil, timings: {})
+    persist_started = Support::ChatPipelineTiming.monotonic
     reply.update!(
       body:   body,
       status: error ? "failed" : "completed",
       error:  error
     )
+    timings["persist_ms"] = Support::ChatPipelineTiming.elapsed_ms(persist_started) if timings
+
+    broadcast_started = Support::ChatPipelineTiming.monotonic
     reply.conversation.broadcast_message!(reply)
+    timings["broadcast_ms"] = Support::ChatPipelineTiming.elapsed_ms(broadcast_started) if timings
+
+    Support::ChatPipelineTiming.persist(reply, timings) if timings.present?
   end
 
   def resolve_attachment_paths(message)

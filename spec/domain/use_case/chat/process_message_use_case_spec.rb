@@ -7,7 +7,8 @@ RSpec.describe UseCase::Chat::ProcessMessageUseCase do
     described_class.new(
       transcriber:         transcriber,
       receipt_extractor:   receipt_extractor,
-      answerer:            answerer
+      answerer:            answerer,
+      agent_selector:      agent_selector
     )
   end
 
@@ -17,12 +18,21 @@ RSpec.describe UseCase::Chat::ProcessMessageUseCase do
   let(:transcriber)  { instance_double(UseCase::Chat::TranscribeMessageUseCase) }
   let(:receipt_extractor) { instance_double(UseCase::Chat::ExtractReceiptUseCase, call: []) }
   let(:answerer)     { instance_double(UseCase::Chat::AnswerConversationallyUseCase) }
+  let(:agent_selector) { instance_double(UseCase::Chat::SelectAgentUseCase) }
+  let(:selection) do
+    UseCase::Chat::SelectAgentUseCase::Result.new(
+      agent:      Llm::Agents::Registry::DEFAULT,
+      intent:     "unknown",
+      confidence: 0.0
+    )
+  end
 
   let(:assistant_reply) do
     build_stubbed(:chat_message, conversation: conversation, user: user, role: "assistant", status: "completed", body: "ok!")
   end
 
   before do
+    allow(agent_selector).to receive(:call).and_return(selection)
     allow(answerer).to receive(:call).and_return(assistant_reply)
   end
 
@@ -37,6 +47,15 @@ RSpec.describe UseCase::Chat::ProcessMessageUseCase do
       use_case.call(message: message)
 
       expect(answerer).to have_received(:call).with(hash_including(user_message: message, side_facts: []))
+    end
+
+    it "records pipeline timings on the user message" do
+      use_case.call(message: message)
+
+      timings = message.reload.payload.fetch("timings")
+      expect(timings["intent_ms"]).to be_a(Integer)
+      expect(timings["intent_llm"]).to eq(false)
+      expect(timings["intent"]).to eq("unknown")
     end
 
     context "when an error is raised mid-processing" do

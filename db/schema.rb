@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[7.0].define(version: 2026_09_06_010001) do
+ActiveRecord::Schema[7.0].define(version: 2026_09_27_140001) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pgcrypto"
   enable_extension "plpgsql"
@@ -118,6 +118,23 @@ ActiveRecord::Schema[7.0].define(version: 2026_09_06_010001) do
     t.index ["user_id"], name: "index_chat_messages_on_user_id"
   end
 
+  create_table "goals", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
+    t.uuid "user_id", null: false
+    t.uuid "category_id"
+    t.string "name", null: false
+    t.decimal "target_amount", precision: 10, scale: 2, null: false
+    t.decimal "current_amount", precision: 10, scale: 2, default: "0.0", null: false
+    t.date "deadline"
+    t.string "status", default: "active", null: false
+    t.text "notes"
+    t.datetime "achieved_at"
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["category_id"], name: "index_goals_on_category_id"
+    t.index ["user_id", "status"], name: "index_goals_on_user_id_and_status"
+    t.index ["user_id"], name: "index_goals_on_user_id"
+  end
+
   create_table "insights", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
     t.uuid "user_id", null: false
     t.string "reference_type", null: false
@@ -149,6 +166,23 @@ ActiveRecord::Schema[7.0].define(version: 2026_09_06_010001) do
     t.index ["category_id"], name: "index_installment_plans_on_category_id"
     t.index ["user_id", "status"], name: "index_installment_plans_on_user_id_and_status"
     t.index ["user_id"], name: "index_installment_plans_on_user_id"
+  end
+
+  create_table "investments", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
+    t.uuid "user_id", null: false
+    t.string "name", null: false
+    t.string "asset_type", default: "other", null: false
+    t.string "institution"
+    t.decimal "invested_amount", precision: 10, scale: 2, null: false
+    t.decimal "current_amount", precision: 10, scale: 2, default: "0.0", null: false
+    t.date "invested_on", null: false
+    t.string "status", default: "active", null: false
+    t.text "notes"
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["user_id", "asset_type"], name: "index_investments_on_user_id_and_asset_type"
+    t.index ["user_id", "status"], name: "index_investments_on_user_id_and_status"
+    t.index ["user_id"], name: "index_investments_on_user_id"
   end
 
   create_table "receipts", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
@@ -244,9 +278,12 @@ ActiveRecord::Schema[7.0].define(version: 2026_09_06_010001) do
   add_foreign_key "chat_messages", "chat_conversations", column: "conversation_id"
   add_foreign_key "chat_messages", "chat_messages", column: "parent_message_id"
   add_foreign_key "chat_messages", "users"
+  add_foreign_key "goals", "categories"
+  add_foreign_key "goals", "users"
   add_foreign_key "insights", "users"
   add_foreign_key "installment_plans", "categories"
   add_foreign_key "installment_plans", "users"
+  add_foreign_key "investments", "users"
   add_foreign_key "receipts", "categories"
   add_foreign_key "receipts", "users"
   add_foreign_key "recurrence_rules", "categories"

@@ -73,5 +73,35 @@ RSpec.describe UseCase::Financial::Category::DestroyCategoryUseCase do
         }.not_to change(Financial::Category, :count)
       end
     end
+
+    context "when category still has open installments" do
+      let(:plan) { create(:financial_installment_plan, user: user, category: category) }
+
+      before do
+        create(:financial_transaction, :pending, user: user, category: category, installment_plan: plan)
+      end
+
+      it "raises ArgumentError" do
+        expect {
+          use_case.call(user: user, id: category.id)
+        }.to raise_error(ArgumentError, /remaining installments/)
+      end
+    end
+
+    context "when only paid installments remain" do
+      let(:plan) { create(:financial_installment_plan, user: user, category: category) }
+      let!(:installment) do
+        create(:financial_transaction, :paid, user: user, category: category, installment_plan: plan)
+      end
+
+      it "destroys the category and detaches the history" do
+        expect {
+          use_case.call(user: user, id: category.id)
+        }.to change(user.categories, :count).by(-1)
+
+        expect(installment.reload.category_id).to be_nil
+        expect(plan.reload.category_id).to be_nil
+      end
+    end
   end
 end

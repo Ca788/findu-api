@@ -13,10 +13,16 @@ module Llm
           Llm::Tools::RegisterTransactionTool,
           Llm::Tools::RegisterInstallmentPlanTool,
           Llm::Tools::RegisterBudgetTool,
+          Llm::Tools::RegisterGoalTool,
+          Llm::Tools::ContributeToGoalTool,
+          Llm::Tools::RegisterInvestmentTool,
+          Llm::Tools::UpdateInvestmentTool,
           Llm::Tools::RegisterCategoryTool,
           Llm::Tools::ListTransactionsTool,
           Llm::Tools::ListCategoriesTool,
           Llm::Tools::ListBudgetsTool,
+          Llm::Tools::ListGoalsTool,
+          Llm::Tools::ListInvestmentsTool,
           Llm::Tools::UpdateTransactionTool,
           Llm::Tools::DestroyTransactionTool,
           Llm::Tools::DestroyTransactionsBatchTool,
@@ -39,7 +45,9 @@ module Llm
         tool_classes:      [
           Llm::Tools::ListTransactionsTool,
           Llm::Tools::ListCategoriesTool,
-          Llm::Tools::ListBudgetsTool
+          Llm::Tools::ListBudgetsTool,
+          Llm::Tools::ListGoalsTool,
+          Llm::Tools::ListInvestmentsTool
         ]
       )
 
@@ -59,11 +67,17 @@ module Llm
           Llm::Tools::RegisterTransactionTool,
           Llm::Tools::RegisterInstallmentPlanTool,
           Llm::Tools::RegisterBudgetTool,
+          Llm::Tools::RegisterGoalTool,
+          Llm::Tools::ContributeToGoalTool,
+          Llm::Tools::RegisterInvestmentTool,
+          Llm::Tools::UpdateInvestmentTool,
           Llm::Tools::RegisterCategoryTool,
           Llm::Tools::UpdateTransactionTool,
           Llm::Tools::UpdateCategoryTool,
           Llm::Tools::ListCategoriesTool,
-          Llm::Tools::ListTransactionsTool
+          Llm::Tools::ListTransactionsTool,
+          Llm::Tools::ListGoalsTool,
+          Llm::Tools::ListInvestmentsTool
         ]
       )
 
@@ -89,10 +103,14 @@ module Llm
       INTENT_MAP = {
         "create_transaction" => LAUNCHER,
         "create_budget"      => LAUNCHER,
+        "create_goal"        => LAUNCHER,
+        "create_investment"  => LAUNCHER,
         "create_category"    => LAUNCHER,
         "create_installment" => LAUNCHER,
         "query_balance"      => ANALYST,
         "query_budget"       => ANALYST,
+        "query_goal"         => ANALYST,
+        "query_investment"   => ANALYST,
         "delete_transaction" => CLEANER
       }.freeze
 

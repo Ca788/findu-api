@@ -15,10 +15,16 @@ class UseCase::Financial::Transaction::DestroyTransactionsBatchUseCase
 
     scoped = user.transactions.where(id: requested)
     found_ids = scoped.pluck(:id).map(&:to_s)
+    category_ids = scoped.where.not(installment_plan_id: nil).pluck(:category_id)
 
     Financial::Transaction.transaction do
       scoped.destroy_all
     end
+
+    UseCase::Financial::Category::PurgeCategoryWithoutInstallmentsUseCase.new.call(
+      user:         user,
+      category_ids: category_ids
+    )
 
     Result.new(
       destroyed_ids: found_ids,

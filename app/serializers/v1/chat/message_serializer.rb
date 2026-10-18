@@ -8,12 +8,6 @@ module V1
       view :default do
         fields :role, :kind, :body, :status, :intent, :conversation_id,
                :parent_message_id, :client_message_id, :created_at, :updated_at
-      end
-
-      view :extended do
-        include_view :default
-
-        fields :payload, :error
 
         field :audio_url do |message|
           next nil unless message.audio.attached?
@@ -34,6 +28,12 @@ module V1
             }
           end
         end
+      end
+
+      view :extended do
+        include_view :default
+
+        fields :payload, :error
       end
     end
   end

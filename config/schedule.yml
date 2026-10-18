@@ -4,6 +4,12 @@ generate_ai_insights:
   queue: insights
   description: "Gera insights financeiros via IA para cada usuário ativo."
 
+sweep_stale_chat_messages:
+  cron: "<%= ENV.fetch('CHAT_SWEEP_CRON', '*/5 * * * *') %>"
+  class: "Chat::SweepStaleMessagesJob"
+  queue: default
+  description: "Encerra mensagens de chat presas em processing quando o worker morre no meio."
+
 materialize_future_entries:
   cron: "<%= ENV.fetch('MATERIALIZE_ENTRIES_CRON', '30 3 * * *') %>"
   class: "Financial::MaterializeFutureEntriesJob"

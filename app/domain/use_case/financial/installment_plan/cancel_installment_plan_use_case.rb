@@ -10,6 +10,8 @@ class UseCase::Financial::InstallmentPlan::CancelInstallmentPlanUseCase
   def call(user:, id:)
     plan = user.installment_plans.find(id)
 
+    category_id = plan.category_id
+
     ApplicationRecord.transaction do
       plan.update!(status: "canceled", canceled_at: Time.current)
 
@@ -19,6 +21,10 @@ class UseCase::Financial::InstallmentPlan::CancelInstallmentPlanUseCase
           .destroy_all
     end
 
-    plan
+    UseCase::Financial::Category::PurgeCategoryWithoutInstallmentsUseCase.new.call(
+      user:         user,
+      category_ids: category_id
+    )
+    plan.reload
   end
 end

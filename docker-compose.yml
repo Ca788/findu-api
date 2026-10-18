@@ -51,6 +51,7 @@ services:
       MAILER_ADDRESS: maildev
       MAILER_PORT: 1025
       MAILER_DOMAIN: example.com
+      FRONTEND_ORIGIN: http://localhost:5147,http://127.0.0.1:5147
 
   sidekiq:
     build: .

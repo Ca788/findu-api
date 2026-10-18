@@ -42,7 +42,7 @@ module Chat
               allow_nil: true
 
     validates :model_id,
-              inclusion: { in: ->(_) { Llm::Models.chain("CHAT_AGENT_MODEL") } },
+              inclusion: { in: ->(_) { Llm::Models.known } },
               allow_nil: true
 
     def archived?

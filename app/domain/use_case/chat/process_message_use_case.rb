@@ -16,13 +16,15 @@ class UseCase::Chat::ProcessMessageUseCase
   end
 
   # @param [Chat::Message] message
+  # @param [Hash] timings
   # @return [Chat::Message] assistant reply
-  def call(message:)
+  def call(message:, timings: {})
+    timings = timings.stringify_keys
     message.update!(status: "processing")
     message.conversation.broadcast_message!(message)
 
-    transcription_metadata = transcribe_if_audio(message)
-    receipt_side_effects   = run_receipt_side_effects(message)
+    transcription_metadata = transcribe_if_audio_measured(message, timings)
+    receipt_side_effects   = extract_receipts_measured(message, timings)
 
     payload = merge_payloads(receipt_side_effects).merge(
       transcription: transcription_metadata
@@ -30,25 +32,74 @@ class UseCase::Chat::ProcessMessageUseCase
 
     finalize_user_message(message, payload: payload)
 
-    selection = @agent_selector.call(
-      text:         message.body,
-      forced_agent: message.conversation.agent_id
-    )
-    @answerer.call(
+    selection = select_agent_measured(message, timings)
+    reply = @answerer.call(
       user_message: message,
       side_facts:   receipt_side_effects.map(&:fact),
-      agent:        selection.agent
+      agent:        selection.agent,
+      timings:      timings
     )
+    Support::ChatPipelineTiming.persist(message, timings)
+    reply
   rescue StandardError => e
     message.update!(
       status: "failed",
       error:  { class: e.class.name, message: e.message }
     )
+    Support::ChatPipelineTiming.persist(message, timings)
     message.conversation.broadcast_message!(message)
     raise
   end
 
   private
+
+  def transcribe_if_audio_measured(message, timings)
+    return transcribe_if_audio(message) unless message.kind_audio?
+
+    result, elapsed = Support::ChatPipelineTiming.measure(
+      "transcribe",
+      message_id: message.id,
+      user_id:    message.user_id
+    ) { transcribe_if_audio(message) }
+    timings["transcribe_ms"] = elapsed
+    result
+  end
+
+  def extract_receipts_measured(message, timings)
+    return run_receipt_side_effects(message) unless receipt_extraction_needed?(message)
+
+    result, elapsed = Support::ChatPipelineTiming.measure(
+      "receipt",
+      message_id: message.id,
+      user_id:    message.user_id
+    ) { run_receipt_side_effects(message) }
+    timings["receipt_ms"] = elapsed
+    result
+  end
+
+  def receipt_extraction_needed?(message)
+    existing = message.payload.is_a?(Hash) && message.payload["receipt_candidates"]
+    existing.present? || message.image_attachments.any?
+  end
+
+  def select_agent_measured(message, timings)
+    timings["intent_llm"] = false
+
+    result, elapsed = Support::ChatPipelineTiming.measure(
+      "intent",
+      message_id: message.id,
+      user_id:    message.user_id,
+      intent_llm: timings["intent_llm"]
+    ) do
+      @agent_selector.call(
+        text:         message.body,
+        forced_agent: message.conversation.agent_id
+      )
+    end
+    timings["intent_ms"] = elapsed
+    timings["intent"] = result.intent
+    result
+  end
 
   def transcribe_if_audio(message)
     return nil unless message.kind_audio?

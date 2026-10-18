@@ -13,7 +13,14 @@ unless Rails.env.production?
 end
 
 if Rails.env.development?
-  allowed_origins.concat(%w[http://localhost:3000 http://localhost:5147])
+  allowed_origins.concat(
+    %w[
+      http://localhost:3000
+      http://127.0.0.1:3000
+      http://localhost:5147
+      http://127.0.0.1:5147
+    ]
+  )
 end
 
 if allowed_origins.empty?

@@ -9,6 +9,8 @@ module Api
         def index
           messages = @conversation.messages
                                   .not_deleted
+                                  .with_attached_audio
+                                  .with_attached_attachments
                                   .order(created_at: :asc)
                                   .page(page_param)
                                   .per(per_page_param)
@@ -16,7 +18,7 @@ module Api
           render json: ApiResponseSerializer.render_data_array(
             messages,
             serializer:      ::V1::Chat::MessageSerializer,
-            serializer_view: :default,
+            serializer_view: serializer_view_param(default: :default),
             pagination:      pagination_for(messages)
           ), status: :ok
         end

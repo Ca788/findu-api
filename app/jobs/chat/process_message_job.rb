@@ -32,6 +32,17 @@ class Chat::ProcessMessageJob < ApplicationJob
 
   # @param [Chat::Message] message
   def perform(message)
-    UseCase::Chat::ProcessMessageUseCase.new.call(message: message)
+    timings = nil
+    started = nil
+    timings = Support::ChatPipelineTiming.existing(message)
+    timings["queue_wait_ms"] = Support::ChatPipelineTiming.queue_wait_ms(timings["enqueued_at"])
+    started = Support::ChatPipelineTiming.monotonic
+
+    UseCase::Chat::ProcessMessageUseCase.new.call(message: message, timings: timings)
+  ensure
+    if message && timings
+      timings["total_job_ms"] = Support::ChatPipelineTiming.elapsed_ms(started) if started
+      Support::ChatPipelineTiming.persist(message, timings)
+    end
   end
 end

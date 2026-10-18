@@ -3,8 +3,11 @@
 module Llm
   module Tools
     class BaseTool < RubyLLM::Tool
-      TRANSACTION_TYPES   = %w[expense income].freeze
-      BUDGET_PERIOD_TYPES = %w[weekly monthly yearly custom].freeze
+      TRANSACTION_TYPES        = %w[expense income].freeze
+      BUDGET_PERIOD_TYPES      = %w[weekly monthly yearly custom].freeze
+      GOAL_STATUSES            = %w[active achieved canceled].freeze
+      INVESTMENT_ASSET_TYPES   = %w[fixed_income stocks funds treasury crypto other].freeze
+      INVESTMENT_STATUSES      = %w[active redeemed].freeze
 
       protected
 
@@ -52,6 +55,8 @@ module Llm
         when "Financial::Transaction" then "Transação não encontrada para este usuário."
         when "Financial::Category"    then "Categoria não encontrada para este usuário."
         when "Financial::Budget"      then "Orçamento não encontrado para este usuário."
+        when "Financial::Goal"        then "Meta não encontrada para este usuário."
+        when "Financial::Investment"  then "Investimento não encontrado para este usuário."
         else                               "Recurso não encontrado."
         end
       end

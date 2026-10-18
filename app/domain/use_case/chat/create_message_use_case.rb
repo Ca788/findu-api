@@ -20,6 +20,7 @@ class UseCase::Chat::CreateMessageUseCase
     end
 
     kind = audio.present? ? "audio" : "text"
+    started = Support::ChatPipelineTiming.monotonic
 
     message = conversation.messages.new(
       user:              user,
@@ -38,6 +39,12 @@ class UseCase::Chat::CreateMessageUseCase
 
     conversation.broadcast_message!(message)
     Chat::ProcessMessageJob.perform_later(message)
+
+    Support::ChatPipelineTiming.persist(
+      message,
+      "enqueued_at" => Time.current.iso8601(3),
+      "create_ms"   => Support::ChatPipelineTiming.elapsed_ms(started)
+    )
 
     message
   end

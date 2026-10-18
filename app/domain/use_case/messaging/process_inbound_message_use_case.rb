@@ -7,14 +7,23 @@ class UseCase::Messaging::ProcessInboundMessageUseCase
   # @param [UseCase::Messaging::ExtractTransactionFromMessageUseCase]
   # @param [UseCase::Financial::Transaction::CreateTransactionUseCase]
   # @param [UseCase::Financial::Category::FindOrCreateByNameUseCase]
+  # @param [UseCase::Artifact::CreateArtifactUseCase]
+  # @param [UseCase::Artifact::ExtractArtifactDataUseCase]
+  # @param [UseCase::Artifact::CreateTransactionFromArtifactUseCase]
   def initialize(provider:,
                  extractor: UseCase::Messaging::ExtractTransactionFromMessageUseCase.new,
                  transaction_creator: UseCase::Financial::Transaction::CreateTransactionUseCase.new,
-                 category_finder: UseCase::Financial::Category::FindOrCreateByNameUseCase.new)
-    @provider            = provider
-    @extractor           = extractor
-    @transaction_creator = transaction_creator
-    @category_finder     = category_finder
+                 category_finder: UseCase::Financial::Category::FindOrCreateByNameUseCase.new,
+                 artifact_creator: UseCase::Artifact::CreateArtifactUseCase.new,
+                 artifact_extractor: UseCase::Artifact::ExtractArtifactDataUseCase.new,
+                 artifact_transaction_creator: UseCase::Artifact::CreateTransactionFromArtifactUseCase.new)
+    @provider                     = provider
+    @extractor                    = extractor
+    @transaction_creator          = transaction_creator
+    @category_finder              = category_finder
+    @artifact_creator             = artifact_creator
+    @artifact_extractor           = artifact_extractor
+    @artifact_transaction_creator = artifact_transaction_creator
   end
 
   # @param [Messaging::Message]
@@ -38,14 +47,32 @@ class UseCase::Messaging::ProcessInboundMessageUseCase
 
   def handle_image(user, message)
     attachment = @provider.fetch_media(**message.media.first)
-    UseCase::Artifact::CreateArtifactUseCase.new.call(
+    artifact   = @artifact_creator.call(
       user:          user,
       file:          attachment,
       artifact_type: "receipt",
       source:        "whatsapp",
-      raw_data:      { "reply_to" => message.reply_to }
+      raw_data:      { "reply_to" => message.reply_to },
+      process_async: false
     )
-    @provider.send_message(to: message.reply_to, body: reply_image_received)
+
+    reply = register_receipt(artifact)
+    Messaging::SendMessageJob.perform_later(message.reply_to, reply)
+  end
+
+  # Extração e lançamento ficam na própria request: uma chamada ao modelo, sem
+  # retry que a repita. A resposta é sempre enfileirada, inclusive em falha.
+  def register_receipt(artifact)
+    artifact = @artifact_extractor.call(artifact: artifact)
+    return reply_receipt_needs_review if artifact.needs_review?
+
+    transaction = @artifact_transaction_creator.call(artifact: artifact)
+    Chat::Replies::Formatter.transaction(transaction)
+  rescue StandardError => e
+    Rails.logger.error(
+      "[ProcessInboundMessageUseCase] artifact ##{artifact.id} failed: #{e.class}: #{e.message}"
+    )
+    reply_receipt_error
   end
 
   def handle_text(user, message)
@@ -77,7 +104,11 @@ class UseCase::Messaging::ProcessInboundMessageUseCase
     'Não entendi. Tente: "gastei R$50 no mercado" ou "recebi R$200 de salário".'
   end
 
-  def reply_image_received
-    "Recibo recebido! Estou processando... te aviso quando estiver pronto."
+  def reply_receipt_needs_review
+    "Recibo recebido, mas não consegui confirmar os dados. Confira no app para registrar."
+  end
+
+  def reply_receipt_error
+    "Recibo recebido, mas não consegui ler os dados. Tente uma foto mais nítida ou registre no app."
   end
 end

@@ -6,8 +6,9 @@ class UseCase::Artifact::CreateArtifactUseCase
   # @param [String]
   # @param [String, nil]
   # @param [Hash]
+  # @param [Boolean] process_async
   # @return [Artifact]
-  def call(user:, file:, artifact_type:, source: nil, raw_data: {})
+  def call(user:, file:, artifact_type:, source: nil, raw_data: {}, process_async: true)
     raise ArgumentError, "file is required" if file.blank?
 
     artifact = user.artifacts.create!(
@@ -19,7 +20,7 @@ class UseCase::Artifact::CreateArtifactUseCase
 
     artifact.file.attach(file)
 
-    Artifacts::ProcessOcrJob.perform_later(artifact)
+    Artifacts::ProcessOcrJob.perform_later(artifact) if process_async
 
     artifact
   end

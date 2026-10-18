@@ -19,6 +19,8 @@ RSpec.describe UseCase::Chat::AnswerConversationallyUseCase do
       allow(chat).to receive(:with_instructions).and_return(chat)
       allow(chat).to receive(:with_tools).and_return(chat)
       allow(chat).to receive(:add_message).and_return(chat)
+      allow(chat).to receive(:on_tool_call).and_return(chat)
+      allow(chat).to receive(:messages).and_return([])
     end
   end
 
@@ -45,6 +47,22 @@ RSpec.describe UseCase::Chat::AnswerConversationallyUseCase do
         body:   "Olá, tudo bem?"
       )
       expect(reply.parent_message_id).to eq(user_message.id)
+    end
+
+    it "records generation timings on the assistant message" do
+      stream_chunks("Olá", ", ", "tudo bem?")
+
+      reply = use_case.call(user_message: user_message)
+      timings = reply.reload.payload.fetch("timings")
+
+      expect(timings["prompt_chars"]).to eq("system prompt".length)
+      expect(timings["history_messages"]).to eq(0)
+      expect(timings["ttft_ms"]).to be_a(Integer)
+      expect(timings["generation_ms"]).to be_a(Integer)
+      expect(timings["tool_rounds"]).to eq(0)
+      expect(timings["persist_ms"]).to be_a(Integer)
+      expect(timings["broadcast_ms"]).to be_a(Integer)
+      expect(timings["context_ms"]).to be_a(Integer)
     end
 
     it "falls back when the model yields no content" do

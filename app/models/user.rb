@@ -39,6 +39,8 @@ class User < ApplicationRecord
   has_many :categories, class_name: "Financial::Category", dependent: :destroy
   has_many :transactions, class_name: "Financial::Transaction", dependent: :destroy
   has_many :budgets, class_name: "Financial::Budget", dependent: :destroy
+  has_many :goals, class_name: "Financial::Goal", dependent: :destroy
+  has_many :investments, class_name: "Financial::Investment", dependent: :destroy
   has_many :receipts, class_name: "Financial::Receipt", dependent: :destroy
   has_many :recurrence_rules, class_name: "Financial::RecurrenceRule", dependent: :destroy
   has_many :installment_plans, class_name: "Financial::InstallmentPlan", dependent: :destroy

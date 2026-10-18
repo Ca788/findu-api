@@ -12,16 +12,29 @@ class UseCase::Financial::InstallmentPlan::UpdateInstallmentPlanUseCase
   def call(user:, id:, attributes:)
     plan = user.installment_plans.find(id)
     permitted = attributes.symbolize_keys.slice(:description, :category_id, :monthly_amount)
+    previous_category_id = plan.category_id
 
     ApplicationRecord.transaction do
       plan.update!(permitted)
       propagate_to_future_pending(plan, permitted)
     end
 
+    release_previous_category(user, previous_category_id, plan.category_id)
     plan
   end
 
   private
+
+  def release_previous_category(user, previous_category_id, current_category_id)
+    return if previous_category_id.blank?
+    return if previous_category_id == current_category_id
+
+    UseCase::Financial::Category::PurgeCategoryWithoutInstallmentsUseCase.new.call(
+      user:         user,
+      category_ids: previous_category_id,
+      orphaned:     true
+    )
+  end
 
   def propagate_to_future_pending(plan, permitted)
     future = plan.transactions

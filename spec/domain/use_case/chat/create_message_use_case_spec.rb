@@ -29,6 +29,14 @@ RSpec.describe UseCase::Chat::CreateMessageUseCase do
           use_case.call(conversation: conversation, user: user, body: "gastei 50")
         }.to have_enqueued_job(Chat::ProcessMessageJob)
       end
+
+      it "stamps enqueue timing on the message payload" do
+        message = use_case.call(conversation: conversation, user: user, body: "gastei 50")
+        timings = message.reload.payload.fetch("timings")
+
+        expect(timings["enqueued_at"]).to be_present
+        expect(timings["create_ms"]).to be_a(Integer)
+      end
     end
 
     context "when body, audio and attachments are all blank" do
