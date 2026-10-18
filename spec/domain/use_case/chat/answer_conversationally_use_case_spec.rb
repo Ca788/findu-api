@@ -20,6 +20,7 @@ RSpec.describe UseCase::Chat::AnswerConversationallyUseCase do
       allow(chat).to receive(:with_tools).and_return(chat)
       allow(chat).to receive(:add_message).and_return(chat)
       allow(chat).to receive(:on_tool_call).and_return(chat)
+      allow(chat).to receive(:on_tool_result).and_return(chat)
       allow(chat).to receive(:messages).and_return([])
     end
   end
@@ -47,6 +48,28 @@ RSpec.describe UseCase::Chat::AnswerConversationallyUseCase do
         body:   "Olá, tudo bem?"
       )
       expect(reply.parent_message_id).to eq(user_message.id)
+    end
+
+    it "attaches receipt confirmation actions when the user message awaits confirmation" do
+      user_message.update!(
+        payload: {
+          "receipt_awaiting_confirmation" => true,
+          "receipt_candidates" => [{
+            "amount" => "50.0",
+            "description" => "Mercado",
+            "transaction_type" => "expense"
+          }]
+        }
+      )
+      stream_chunks("Confere esses dados?")
+
+      reply = use_case.call(user_message: user_message)
+      payload = reply.reload.payload
+
+      expect(payload["actions"]).to include(
+        a_hash_including("id" => "register_expense", "label" => "Registrar despesa")
+      )
+      expect(payload["card"]).to include("title" => "Despesa identificada")
     end
 
     it "records generation timings on the assistant message" do

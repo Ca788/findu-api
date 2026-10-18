@@ -8,7 +8,7 @@ class UseCase::Chat::AnswerConversationallyUseCase
   STREAM_FLUSH_MIN_CHARS = ENV.fetch("CHAT_STREAM_FLUSH_MIN_CHARS", "24").to_i
   FALLBACK_BODY          = "Desculpe, tive um problema agora. Pode repetir?"
   RATE_LIMIT_BODY        = "Atingi o limite de requisições do modelo de IA agora. " \
-                           "Tente de novo em alguns segundos — ou aumente a cota do Gemini."
+                           "Tente de novo em alguns segundos, ou aumente a cota do Gemini."
 
   # @param [UseCase::Chat::BuildUserContextUseCase]
   # @param [Llm::Prompts::ChatAgentPromptBuilder]
@@ -58,19 +58,22 @@ class UseCase::Chat::AnswerConversationallyUseCase
         resolve_attachment_paths(user_message)
       end
 
+    tool_results = []
     final_body = Llm::ModelFallback.with_fallback(models) do |model|
       timings["model"] = model
       chat = build_chat(model: model, system_text: system_text, history: history, user: user, agent: selected_agent)
-      stream_response(
+      body, tool_results = stream_response(
         chat: chat,
         user_message: user_message,
         reply: reply,
         attachment_paths: attachment_paths,
         timings: timings
       )
+      body
     end
 
-    finalize_reply(reply, body: final_body, timings: timings)
+    ui = Chat::Replies::ActionBuilder.call(user_message: user_message, tool_results: tool_results)
+    finalize_reply(reply, body: final_body, timings: timings, ui: ui)
     reply
   rescue RubyLLM::RateLimitError, StreamAlreadyStartedError => e
     Rails.logger.warn("[AnswerConversationallyUseCase] rate limit: #{e.message}")
@@ -122,9 +125,20 @@ class UseCase::Chat::AnswerConversationallyUseCase
     gen_started   = Support::ChatPipelineTiming.monotonic
     first_token_at = nil
     tool_rounds    = 0
+    tool_results   = []
+    pending_tool   = nil
 
     if chat.respond_to?(:on_tool_call)
-      chat.on_tool_call { tool_rounds += 1 }
+      chat.on_tool_call do |tool_call|
+        tool_rounds += 1
+        pending_tool = tool_call.respond_to?(:name) ? tool_call.name.to_s : nil
+      end
+    end
+
+    if chat.respond_to?(:on_tool_result)
+      chat.on_tool_result do |result|
+        tool_results << { "name" => pending_tool, "result" => result }
+      end
     end
 
     chat.ask(user_message.body.to_s, with: attachment_paths) do |chunk|
@@ -142,7 +156,7 @@ class UseCase::Chat::AnswerConversationallyUseCase
 
     flush_delta!(reply, buffer, flushed_upto) if buffer.length > flushed_upto
     record_generation_timings(timings, chat, gen_started, first_token_at, tool_rounds)
-    buffer.presence || FALLBACK_BODY
+    [buffer.presence || FALLBACK_BODY, tool_results]
   rescue RubyLLM::RateLimitError
     record_generation_timings(timings, chat, gen_started, first_token_at, tool_rounds)
     raise if flushed_upto.zero?
@@ -174,12 +188,18 @@ class UseCase::Chat::AnswerConversationallyUseCase
     reply.conversation.broadcast_delta!(reply.id, delta)
   end
 
-  def finalize_reply(reply, body:, error: nil, timings: {})
+  def finalize_reply(reply, body:, error: nil, timings: {}, ui: nil)
     persist_started = Support::ChatPipelineTiming.monotonic
+    payload = (reply.payload || {}).deep_stringify_keys
+    if ui
+      payload["actions"] = Array(ui.actions)
+      payload["card"] = ui.card
+    end
     reply.update!(
-      body:   body,
-      status: error ? "failed" : "completed",
-      error:  error
+      body:    body,
+      status:  error ? "failed" : "completed",
+      error:   error,
+      payload: payload
     )
     timings["persist_ms"] = Support::ChatPipelineTiming.elapsed_ms(persist_started) if timings
 

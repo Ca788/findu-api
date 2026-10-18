@@ -45,4 +45,22 @@ RSpec.describe V1::Chat::MessageSerializer do
     expect(hash).not_to have_key(:payload)
     expect(hash).not_to have_key(:error)
   end
+
+  it "exposes structured actions and card on the default list view" do
+    message.update!(
+      payload: {
+        "actions" => [{ "id" => "register_expense", "label" => "Registrar despesa", "kind" => "send_message" }],
+        "card"    => { "kind" => "receipt", "title" => "Despesa identificada", "fields" => [] },
+        "timings" => { "intent_ms" => 1 }
+      }
+    )
+
+    hash = described_class.render_as_hash(message.reload, view: :default)
+
+    expect(hash[:actions]).to contain_exactly(
+      a_hash_including("id" => "register_expense", "label" => "Registrar despesa")
+    )
+    expect(hash[:card]).to include("kind" => "receipt", "title" => "Despesa identificada")
+    expect(hash).not_to have_key(:payload)
+  end
 end

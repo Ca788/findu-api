@@ -28,6 +28,20 @@ module V1
             }
           end
         end
+
+        field :actions do |message|
+          payload = message.payload
+          next [] unless payload.is_a?(Hash)
+
+          payload["actions"] || payload[:actions] || []
+        end
+
+        field :card do |message|
+          payload = message.payload
+          next nil unless payload.is_a?(Hash)
+
+          payload["card"] || payload[:card]
+        end
       end
 
       view :extended do
