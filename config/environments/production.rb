@@ -39,7 +39,11 @@ Rails.application.configure do
     .split(",")
     .map(&:strip)
     .reject(&:empty?)
-    .then { |origins| origins + [%r{\Ahttps://[a-z0-9\-]+\.vercel\.app\z}] }
+    .then do |origins|
+      origins +
+        %w[https://localhost http://localhost capacitor://localhost ionic://localhost] +
+        [%r{\Ahttps://[a-z0-9\-]+\.vercel\.app\z}]
+    end
 
   # Force all access to the app over SSL, use Strict-Transport-Security, and use secure cookies.
   # config.force_ssl = true
