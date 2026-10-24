@@ -1,0 +1,88 @@
+x-logs: &logs
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+x-app: &app
+  image: findu-api:local
+  build: .
+  env_file:
+    - .env.production
+  environment:
+    RAILS_ENV: production
+    RAILS_LOG_TO_STDOUT: "true"
+    RAILS_SERVE_STATIC_FILES: "true"
+    STORAGE_SERVICE: supabase
+    PORT: "8080"
+    REDIS_URL: redis://redis:6379/0
+    RAILS_MAX_THREADS: "2"
+    SIDEKIQ_CONCURRENCY: "2"
+  logging: *logs
+
+services:
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes", "--save", "60", "1"]
+    volumes:
+      - redis_data:/data
+    logging: *logs
+
+  migrate:
+    <<: *app
+    restart: "no"
+    command: ["bundle", "exec", "rails", "db:migrate"]
+    depends_on:
+      redis:
+        condition: service_started
+
+  web:
+    <<: *app
+    restart: unless-stopped
+    command: ["bundle", "exec", "rails", "server", "-b", "0.0.0.0", "-p", "8080"]
+    expose:
+      - "8080"
+    depends_on:
+      redis:
+        condition: service_started
+      migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8080/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 12
+      start_period: 90s
+
+  sidekiq:
+    <<: *app
+    restart: unless-stopped
+    command: ["bundle", "exec", "sidekiq"]
+    depends_on:
+      redis:
+        condition: service_started
+      migrate:
+        condition: service_completed_successfully
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      APP_HOST: ${APP_HOST:?defina APP_HOST}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      web:
+        condition: service_healthy
+    logging: *logs
+
+volumes:
+  redis_data:
+  caddy_data:
+  caddy_config:

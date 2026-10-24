@@ -1,0 +1,75 @@
+name: Deploy to Oracle
+
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-oci
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Deploy backend (Oracle VM)
+    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    environment:
+      name: production
+      url: https://${{ vars.OCI_HOST }}
+
+    env:
+      HOST: ${{ vars.OCI_HOST }}
+      SSH_USER: ${{ vars.OCI_SSH_USER }}
+      APP_DIR: /opt/findu
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - name: Configure SSH
+        env:
+          SSH_KEY: ${{ secrets.OCI_SSH_KEY }}
+        run: |
+          mkdir -p ~/.ssh
+          printf '%s\n' "$SSH_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -H "$HOST" >> ~/.ssh/known_hosts 2>/dev/null
+
+      - name: Sync code
+        run: |
+          rsync -az --delete \
+            -e "ssh -i ~/.ssh/deploy_key" \
+            --exclude .git \
+            --exclude tmp \
+            --exclude log \
+            --exclude storage \
+            --exclude .env \
+            --exclude '.env.*' \
+            --exclude spec \
+            --exclude docs \
+            --exclude coverage \
+            ./ "$SSH_USER@$HOST:$APP_DIR/"
+
+      - name: Build and restart containers
+        run: |
+          ssh -i ~/.ssh/deploy_key "$SSH_USER@$HOST" \
+            "cd $APP_DIR && sudo docker compose --env-file .env.production -f docker-compose.prod.yml up -d --build --remove-orphans && sudo docker image prune -f"
+
+      - name: Verify health
+        run: |
+          for i in $(seq 1 24); do
+            if curl -fsS "https://$HOST/health" | grep -q ok; then
+              echo "Health ok"
+              exit 0
+            fi
+            sleep 10
+          done
+          echo "Health check failed"
+          exit 1
