@@ -15,6 +15,7 @@ class Rack::Attack
   LOGIN_PATH           = "/api/v1/login"
   SIGNUP_PATH          = "/api/v1/user"
   PASSWORD_RESET_PATH  = "/api/v1/password"
+  TOKEN_REFRESH_PATH   = "/api/v1/token/refresh"
   DIRECT_UPLOADS_PATH  = "/rails/active_storage/direct_uploads"
 
   MAX_INSPECTED_BODY_BYTES = 8.kilobytes
@@ -75,6 +76,10 @@ class Rack::Attack
 
   throttle("password_update/ip", limit: 10, period: 1.hour) do |req|
     req.client_ip if req.patch? && req.path == PASSWORD_RESET_PATH
+  end
+
+  throttle("token_refresh/ip", limit: 30, period: 5.minutes) do |req|
+    req.client_ip if req.post? && req.path == TOKEN_REFRESH_PATH
   end
 
   throttle("signup/ip", limit: 5, period: 1.hour) do |req|

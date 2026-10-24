@@ -18,6 +18,8 @@ Rails.application.routes.draw do
         delete "logout", to: "sessions#destroy"
       end
 
+      post "token/refresh", to: "tokens#refresh"
+
       resource :user, only: [:show, :create, :update], controller: "user"
       resource :password, only: [:create, :update], controller: "passwords"
 
@@ -49,6 +51,15 @@ Rails.application.routes.draw do
         end
 
         resources :investments, only: [:index, :show, :create, :update, :destroy]
+
+        resources :boxes, only: [:index, :show, :create, :update] do
+          member do
+            post :archive
+            post :move
+          end
+
+          resources :movements, controller: "boxes/movements", only: [:index]
+        end
 
         resources :receipts, only: [:index, :show, :create] do
           member do

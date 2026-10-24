@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[7.0].define(version: 2026_09_27_140001) do
+ActiveRecord::Schema[7.0].define(version: 2026_10_24_200000) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pgcrypto"
   enable_extension "plpgsql"
@@ -56,6 +56,43 @@ ActiveRecord::Schema[7.0].define(version: 2026_09_27_140001) do
     t.datetime "updated_at", null: false
     t.index ["status"], name: "index_artifacts_on_status"
     t.index ["user_id"], name: "index_artifacts_on_user_id"
+  end
+
+  create_table "box_movements", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
+    t.uuid "box_id", null: false
+    t.uuid "user_id", null: false
+    t.uuid "transaction_id"
+    t.string "kind", null: false
+    t.string "source", default: "manual", null: false
+    t.decimal "amount", precision: 12, scale: 2, null: false
+    t.decimal "balance_after", precision: 12, scale: 2, null: false
+    t.string "description"
+    t.datetime "occurred_at", null: false
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["box_id", "occurred_at"], name: "index_box_movements_on_box_id_and_occurred_at"
+    t.index ["box_id"], name: "index_box_movements_on_box_id"
+    t.index ["transaction_id", "box_id"], name: "index_box_movements_on_transaction_id_and_box_id", unique: true, where: "(transaction_id IS NOT NULL)"
+    t.index ["transaction_id"], name: "index_box_movements_on_transaction_id"
+    t.index ["user_id", "occurred_at"], name: "index_box_movements_on_user_id_and_occurred_at"
+    t.index ["user_id"], name: "index_box_movements_on_user_id"
+  end
+
+  create_table "boxes", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
+    t.uuid "user_id", null: false
+    t.string "name", null: false
+    t.string "kind", default: "custom", null: false
+    t.string "illustration_key", default: "piggy", null: false
+    t.string "color"
+    t.decimal "target_amount", precision: 10, scale: 2
+    t.decimal "balance", precision: 12, scale: 2, default: "0.0", null: false
+    t.integer "position", default: 0, null: false
+    t.text "notes"
+    t.datetime "archived_at"
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["user_id", "archived_at", "position"], name: "index_boxes_on_user_id_and_archived_at_and_position"
+    t.index ["user_id"], name: "index_boxes_on_user_id"
   end
 
   create_table "budgets", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
@@ -223,6 +260,21 @@ ActiveRecord::Schema[7.0].define(version: 2026_09_27_140001) do
     t.index ["user_id"], name: "index_recurrence_rules_on_user_id"
   end
 
+  create_table "refresh_tokens", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
+    t.uuid "user_id", null: false
+    t.string "token_digest", null: false
+    t.uuid "family_id", null: false
+    t.string "client"
+    t.datetime "expires_at", null: false
+    t.datetime "revoked_at"
+    t.datetime "last_used_at"
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["token_digest"], name: "index_refresh_tokens_on_token_digest", unique: true
+    t.index ["user_id", "family_id"], name: "index_refresh_tokens_on_user_id_and_family_id"
+    t.index ["user_id"], name: "index_refresh_tokens_on_user_id"
+  end
+
   create_table "transactions", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
     t.uuid "user_id", null: false
     t.uuid "artifact_id"
@@ -272,6 +324,10 @@ ActiveRecord::Schema[7.0].define(version: 2026_09_27_140001) do
   add_foreign_key "active_storage_attachments", "active_storage_blobs", column: "blob_id"
   add_foreign_key "active_storage_variant_records", "active_storage_blobs", column: "blob_id"
   add_foreign_key "artifacts", "users"
+  add_foreign_key "box_movements", "boxes"
+  add_foreign_key "box_movements", "transactions"
+  add_foreign_key "box_movements", "users"
+  add_foreign_key "boxes", "users"
   add_foreign_key "budgets", "users"
   add_foreign_key "categories", "users"
   add_foreign_key "chat_conversations", "users"
@@ -288,6 +344,7 @@ ActiveRecord::Schema[7.0].define(version: 2026_09_27_140001) do
   add_foreign_key "receipts", "users"
   add_foreign_key "recurrence_rules", "categories"
   add_foreign_key "recurrence_rules", "users"
+  add_foreign_key "refresh_tokens", "users"
   add_foreign_key "transactions", "artifacts"
   add_foreign_key "transactions", "categories"
   add_foreign_key "transactions", "installment_plans"

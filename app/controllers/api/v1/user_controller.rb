@@ -20,13 +20,17 @@ module Api
           email: user_params[:email],
           password: user_params[:password],
           password_confirmation: user_params[:password_confirmation],
-          phone: user_params[:phone]
+          phone: user_params[:phone],
+          client: request.headers["X-Client-Platform"].to_s.presence
         )
 
         response.set_header("Authorization", "Bearer #{result.token}")
 
         render json: ApiResponseSerializer.render(
-          { user: ::V1::UserSerializer.render_as_hash(result.user) },
+          {
+            user:          ::V1::UserSerializer.render_as_hash(result.user),
+            refresh_token: result.refresh_token
+          },
           message: "User created successfully."
         ), status: :created
       end
