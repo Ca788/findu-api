@@ -28,14 +28,40 @@ module Llm
       fallback
     end
 
+    MONEY_IN_TEXT = /
+      (?:r\$\s*)?
+      (
+        \d{1,3}(?:\.\d{3})+,\d{2}
+        |\d+,\d{2}
+        |\d+\.\d{2}
+      )
+    /ix
+
+    # Aceita 13.94, "13,94", "R$ 13,94" e "1.234,56".
     # @param [Object]
     # @return [BigDecimal, nil]
     def parse_decimal(value)
       return nil if value.nil?
 
-      BigDecimal(value.to_s)
+      if value.is_a?(Numeric)
+        BigDecimal(value.to_s)
+      else
+        parse_decimal_string(value.to_s)
+      end
     rescue ArgumentError
       nil
+    end
+
+    # @param [String]
+    # @return [BigDecimal, nil]
+    def largest_money_in(text)
+      return nil if text.blank?
+
+      values = text.to_s.scan(MONEY_IN_TEXT).flatten.filter_map do |token|
+        amount = parse_decimal(token)
+        amount if amount&.positive?
+      end
+      values.max
     end
 
     # @param [Object]
@@ -65,5 +91,24 @@ module Llm
     rescue Date::Error, ArgumentError, TypeError
       nil
     end
+
+    def parse_decimal_string(raw)
+      cleaned = raw.strip
+      return nil if cleaned.blank?
+
+      cleaned = cleaned.sub(/\A(?:r\$|rs)\s*/i, "")
+      cleaned = if cleaned.match?(/\d+\.\d{3},\d{2}\z/)
+        cleaned.gsub(".", "").sub(",", ".")
+      elsif cleaned.include?(",")
+        cleaned.tr(",", ".")
+      else
+        cleaned
+      end
+      cleaned = cleaned.gsub(/[^\d.\-]/, "")
+      return nil if cleaned.blank?
+
+      BigDecimal(cleaned)
+    end
+    private :parse_decimal_string
   end
 end

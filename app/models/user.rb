@@ -41,12 +41,15 @@ class User < ApplicationRecord
   has_many :budgets, class_name: "Financial::Budget", dependent: :destroy
   has_many :goals, class_name: "Financial::Goal", dependent: :destroy
   has_many :investments, class_name: "Financial::Investment", dependent: :destroy
+  has_many :boxes, class_name: "Financial::Box", dependent: :destroy
+  has_many :box_movements, class_name: "Financial::BoxMovement", dependent: :destroy
   has_many :receipts, class_name: "Financial::Receipt", dependent: :destroy
   has_many :recurrence_rules, class_name: "Financial::RecurrenceRule", dependent: :destroy
   has_many :installment_plans, class_name: "Financial::InstallmentPlan", dependent: :destroy
   has_many :insights, class_name: "Intelligence::Insight", dependent: :destroy
   has_many :chat_conversations, class_name: "Chat::Conversation", dependent: :destroy
   has_many :chat_messages, class_name: "Chat::Message", dependent: :destroy
+  has_many :refresh_tokens, dependent: :destroy
 
   has_one_attached :avatar, dependent: :purge_later
 

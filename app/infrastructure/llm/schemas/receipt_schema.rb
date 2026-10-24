@@ -3,7 +3,7 @@
 module Llm
   module Schemas
     class ReceiptSchema < RubyLLM::Schema
-      number :amount,             description: "Total amount of the purchase/payment (decimal, no currency symbol). For installments, this is the TOTAL financed amount when visible, otherwise the installment amount times count."
+      number :amount,             description: "TOTAL paid, decimal with DOT (13.94). Brazilian 'R$ 13,94' is 13.94. Use the line labeled Total. Never 0 if a price is visible; use null if unknown."
       string :occurred_at,        description: "Transaction date in ISO 8601 format (YYYY-MM-DD or full timestamp). Null if not visible."
       string :description,        description: "Vendor or merchant name plus a short description (e.g. 'Posto Shell - combustivel')"
       string :raw_text,           description: "Full raw text extracted from the receipt/screenshot"

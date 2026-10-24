@@ -45,18 +45,36 @@ class UseCase::Chat::ExtractReceiptUseCase
 
   def build_receipt(data)
     is_installment = ActiveModel::Type::Boolean.new.cast(data["is_installment"])
+    raw_text       = data["raw_text"].to_s
+    recovered      = largest_money_in(raw_text)
+    amount         = present_money(parse_decimal(data["amount"])) || recovered
+    total_amount   = present_money(parse_decimal(data["total_amount"])) || recovered
+    monthly_amount = present_money(parse_decimal(data["monthly_amount"]))
+
     Receipt.new(
-      amount:             parse_decimal(data["amount"]),
+      amount:             amount,
       occurred_at:        parse_time(data["occurred_at"]),
-      description:        data["description"],
+      description:        data["description"].presence || merchant_from(raw_text),
       transaction_type:   parse_transaction_type(data["transaction_type"]),
       confidence:         data["confidence"].to_f,
-      raw_text:           data["raw_text"].to_s,
+      raw_text:           raw_text,
       is_installment:     is_installment,
       total_installments: data["total_installments"].presence&.to_i,
-      monthly_amount:     parse_decimal(data["monthly_amount"]),
-      total_amount:       parse_decimal(data["total_amount"])
+      monthly_amount:     monthly_amount,
+      total_amount:       total_amount
     )
+  end
+
+  def present_money(value)
+    return nil if value.nil? || value.zero?
+
+    value
+  end
+
+  def merchant_from(raw_text)
+    return nil if raw_text.blank?
+
+    raw_text.lines.map(&:strip).find { |line| line.match?(/\A[A-Za-zÁ-ú][A-Za-zÁ-ú0-9 .&-]{1,40}\z/) }
   end
 
   def local_path_for(attachment)
