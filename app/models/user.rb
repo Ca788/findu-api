@@ -50,11 +50,25 @@ class User < ApplicationRecord
   has_many :chat_conversations, class_name: "Chat::Conversation", dependent: :destroy
   has_many :chat_messages, class_name: "Chat::Message", dependent: :destroy
   has_many :refresh_tokens, dependent: :destroy
+  has_many :notifications, dependent: :destroy
+  has_many :device_tokens, dependent: :destroy
 
   has_one_attached :avatar, dependent: :purge_later
 
   validates :name, presence: true
   validate :avatar_format_and_size
+
+  def notification_preferences
+    stored = (settings || {}).dig("notifications", "groups") || {}
+
+    Notification::GROUPS.values.index_with do |group|
+      Notification::CHANNELS.index_with { |channel| stored.dig(group, channel) != false }
+    end
+  end
+
+  def notification_enabled?(group, channel)
+    notification_preferences.dig(group.to_s, channel.to_s) == true
+  end
 
   private
 

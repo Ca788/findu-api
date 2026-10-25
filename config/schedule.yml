@@ -10,6 +10,18 @@ sweep_stale_chat_messages:
   queue: default
   description: "Encerra mensagens de chat presas em processing quando o worker morre no meio."
 
+notify_due_entries:
+  cron: "<%= ENV.fetch('NOTIFY_DUE_ENTRIES_CRON', '0 8 * * *') %>"
+  class: "Notifications::NotifyDueEntriesJob"
+  queue: default
+  description: "Notifica contas que vencem hoje, nos próximos 3 dias ou já atrasadas."
+
+notify_idle_users:
+  cron: "<%= ENV.fetch('NOTIFY_IDLE_USERS_CRON', '0 10 * * 1') %>"
+  class: "Notifications::NotifyIdleUsersJob"
+  queue: default
+  description: "Lembrete semanal para quem não registrou lançamentos nos últimos 7 dias."
+
 materialize_future_entries:
   cron: "<%= ENV.fetch('MATERIALIZE_ENTRIES_CRON', '30 3 * * *') %>"
   class: "Financial::MaterializeFutureEntriesJob"

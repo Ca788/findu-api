@@ -25,6 +25,20 @@ Rails.application.routes.draw do
 
       resources :artifacts, only: [:index, :show, :create]
 
+      resources :notifications, only: [:index] do
+        collection do
+          get   :unread_count
+          post  :read_all
+          get   :preferences
+          put   :preferences, action: :update_preferences
+          post   :devices, action: :register_device
+          delete :devices, action: :unregister_device
+        end
+        member do
+          post :read
+        end
+      end
+
       namespace :inbound do
         resources :messages, only: [:create]
       end

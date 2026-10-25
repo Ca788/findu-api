@@ -43,6 +43,7 @@ class UseCase::Financial::Transaction::CreateTransactionUseCase
     )
 
     transaction.budget_warnings = budget_warnings_for(transaction)
+    UseCase::Notifications::NotifyBudgetWarningsUseCase.new.call(user: transaction.user, warnings: transaction.budget_warnings)
     transaction
   end
 

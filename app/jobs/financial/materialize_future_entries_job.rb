@@ -27,7 +27,19 @@ module Financial
         next if plan.remaining_count > 0
 
         plan.update!(status: "completed")
+        notify_completed(plan)
       end
+    end
+
+    def notify_completed(plan)
+      UseCase::Notifications::DispatchNotificationUseCase.new.call(
+        user:       plan.user,
+        kind:       :installment_completed,
+        title:      "Parcelamento quitado: #{plan.description.presence || 'sem descrição'}",
+        body:       "#{plan.total_installments} parcelas pagas, #{Support::Money.brl(plan.paid_amount)} no total.",
+        data:       { route: "/installments", installment_plan_id: plan.id },
+        dedupe_key: "installment_completed:#{plan.id}"
+      )
     end
   end
 end

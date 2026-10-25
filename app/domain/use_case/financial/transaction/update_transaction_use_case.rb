@@ -43,6 +43,7 @@ class UseCase::Financial::Transaction::UpdateTransactionUseCase
     released = release_installment_categories(user, transaction, previous_category_id, installment_related)
     transaction.reload if released.present?
     transaction.budget_warnings = budget_warnings_for(transaction)
+    UseCase::Notifications::NotifyBudgetWarningsUseCase.new.call(user: transaction.user, warnings: transaction.budget_warnings)
     transaction
   end
 

@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[7.0].define(version: 2026_10_24_200000) do
+ActiveRecord::Schema[7.0].define(version: 2026_10_25_010000) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pgcrypto"
   enable_extension "plpgsql"
@@ -155,6 +155,17 @@ ActiveRecord::Schema[7.0].define(version: 2026_10_24_200000) do
     t.index ["user_id"], name: "index_chat_messages_on_user_id"
   end
 
+  create_table "device_tokens", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
+    t.uuid "user_id", null: false
+    t.string "token", null: false
+    t.string "platform", null: false
+    t.datetime "last_seen_at", null: false
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["token"], name: "index_device_tokens_on_token", unique: true
+    t.index ["user_id"], name: "index_device_tokens_on_user_id"
+  end
+
   create_table "goals", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
     t.uuid "user_id", null: false
     t.uuid "category_id"
@@ -220,6 +231,23 @@ ActiveRecord::Schema[7.0].define(version: 2026_10_24_200000) do
     t.index ["user_id", "asset_type"], name: "index_investments_on_user_id_and_asset_type"
     t.index ["user_id", "status"], name: "index_investments_on_user_id_and_status"
     t.index ["user_id"], name: "index_investments_on_user_id"
+  end
+
+  create_table "notifications", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
+    t.uuid "user_id", null: false
+    t.string "kind", null: false
+    t.string "title", null: false
+    t.string "body"
+    t.jsonb "data", default: {}, null: false
+    t.string "dedupe_key"
+    t.string "channels", default: [], null: false, array: true
+    t.datetime "read_at"
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["user_id", "created_at"], name: "index_notifications_on_user_id_and_created_at"
+    t.index ["user_id", "dedupe_key"], name: "index_notifications_on_user_id_and_dedupe_key", unique: true, where: "(dedupe_key IS NOT NULL)"
+    t.index ["user_id", "read_at"], name: "index_notifications_on_user_id_and_read_at"
+    t.index ["user_id"], name: "index_notifications_on_user_id"
   end
 
   create_table "receipts", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
@@ -334,12 +362,14 @@ ActiveRecord::Schema[7.0].define(version: 2026_10_24_200000) do
   add_foreign_key "chat_messages", "chat_conversations", column: "conversation_id"
   add_foreign_key "chat_messages", "chat_messages", column: "parent_message_id"
   add_foreign_key "chat_messages", "users"
+  add_foreign_key "device_tokens", "users"
   add_foreign_key "goals", "categories"
   add_foreign_key "goals", "users"
   add_foreign_key "insights", "users"
   add_foreign_key "installment_plans", "categories"
   add_foreign_key "installment_plans", "users"
   add_foreign_key "investments", "users"
+  add_foreign_key "notifications", "users"
   add_foreign_key "receipts", "categories"
   add_foreign_key "receipts", "users"
   add_foreign_key "recurrence_rules", "categories"
