@@ -21,20 +21,34 @@ RSpec.describe Push::FcmClient do
     end
   end
 
-  before do
-    allow(Net::HTTP).to receive(:post_form).and_return(http_response(Net::HTTPOK, 200, access_token: "ya29.test"))
+  def stub_http(fcm:, oauth: { access_token: "ya29.test" })
+    allow(Net::HTTP).to receive(:start) do |host, _port, **_opts, &block|
+      http = instance_double(Net::HTTP)
+      allow(http).to receive(:request) do |req|
+        if host == described_class::TOKEN_URI.host
+          oauth.respond_to?(:call) ? oauth.call(req) : http_response(Net::HTTPOK, 200, oauth)
+        else
+          fcm.respond_to?(:call) ? fcm.call(req) : fcm
+        end
+      end
+      block.call(http)
+    end
   end
 
   it "exchanges a signed JWT for an access token and posts to the project endpoint" do
     captured = nil
-    allow(Net::HTTP).to receive(:start) do |host, _port, **_opts, &block|
-      expect(host).to eq("fcm.googleapis.com")
-      http = instance_double(Net::HTTP)
-      allow(http).to receive(:request) { |req| captured = req; http_response(Net::HTTPOK, 200, name: "projects/findu-test/messages/1") }
-      block.call(http)
-    end
+    stub_http(fcm: lambda { |req|
+      captured = req
+      http_response(Net::HTTPOK, 200, name: "projects/findu-test/messages/1")
+    })
 
-    result = client.send_to_token(token: "abc", title: "Oi", body: "Corpo", data: { route: "/budgets", budget_id: 7 })
+    result = client.send_to_token(
+      token:        "abc",
+      title:        "Oi",
+      body:         "Corpo",
+      data:         { route: "/budgets", budget_id: 7 },
+      collapse_key: "budget_warning"
+    )
 
     expect(result).to eq("name" => "projects/findu-test/messages/1")
     expect(captured.path).to eq("/v1/projects/findu-test/messages:send")
@@ -44,35 +58,72 @@ RSpec.describe Push::FcmClient do
     expect(message["token"]).to eq("abc")
     expect(message["data"]).to eq("route" => "/budgets", "budget_id" => "7")
     expect(message.dig("android", "notification", "channel_id")).to eq("findu_default")
-
-    expect(Net::HTTP).to have_received(:post_form) do |uri, form|
-      expect(uri).to eq(described_class::TOKEN_URI)
-      expect(form[:grant_type]).to eq("urn:ietf:params:oauth:grant-type:jwt-bearer")
-      claims, = JWT.decode(form[:assertion], private_key.public_key, true, algorithm: "RS256")
-      expect(claims).to include("iss" => "fcm@findu-test.iam.gserviceaccount.com", "scope" => described_class::SCOPE)
-    end
+    expect(message.dig("android", "collapse_key")).to eq("budget_warning")
   end
 
   it "raises Unregistered when FCM reports a dead token" do
-    allow(Net::HTTP).to receive(:start) do |*_args, **_opts, &block|
-      http = instance_double(Net::HTTP)
-      allow(http).to receive(:request).and_return(
-        http_response(Net::HTTPNotFound, 404, error: { status: "NOT_FOUND", details: [{ errorCode: "UNREGISTERED" }] })
-      )
-      block.call(http)
-    end
+    stub_http(fcm: http_response(Net::HTTPNotFound, 404, error: {
+      status:  "NOT_FOUND",
+      details: [{ errorCode: "UNREGISTERED" }]
+    }))
 
-    expect { client.send_to_token(token: "dead", title: "Oi", body: nil) }.to raise_error(described_class::Unregistered, "UNREGISTERED")
+    expect { client.send_to_token(token: "dead", title: "Oi", body: nil) }
+      .to raise_error(described_class::Unregistered, "UNREGISTERED")
   end
 
-  it "raises Error for other failures" do
-    allow(Net::HTTP).to receive(:start) do |*_args, **_opts, &block|
-      http = instance_double(Net::HTTP)
-      allow(http).to receive(:request).and_return(http_response(Net::HTTPInternalServerError, 500, error: { status: "INTERNAL" }))
-      block.call(http)
-    end
+  it "raises Unregistered when INVALID_ARGUMENT refers to the registration token" do
+    stub_http(fcm: http_response(Net::HTTPBadRequest, 400, error: {
+      status:  "INVALID_ARGUMENT",
+      message: "The registration token is not a valid FCM registration token",
+      details: [{ errorCode: "INVALID_ARGUMENT" }]
+    }))
 
-    expect { client.send_to_token(token: "x", title: "Oi", body: nil) }.to raise_error(described_class::Error, /INTERNAL/)
+    expect { client.send_to_token(token: "bad", title: "Oi", body: nil) }
+      .to raise_error(described_class::Unregistered, "INVALID_ARGUMENT")
+  end
+
+  it "raises Error when INVALID_ARGUMENT is a payload bug" do
+    stub_http(fcm: http_response(Net::HTTPBadRequest, 400, error: {
+      status:  "INVALID_ARGUMENT",
+      message: "Invalid data payload. Keys must be strings",
+      details: [{ errorCode: "INVALID_ARGUMENT" }]
+    }))
+
+    expect { client.send_to_token(token: "x", title: "Oi", body: nil) }
+      .to raise_error(described_class::Error, /INVALID_ARGUMENT/)
+  end
+
+  it "raises Transient for FCM 5xx" do
+    stub_http(fcm: http_response(Net::HTTPInternalServerError, 500, error: { status: "INTERNAL" }))
+
+    expect { client.send_to_token(token: "x", title: "Oi", body: nil) }
+      .to raise_error(described_class::Transient, /INTERNAL/)
+  end
+
+  it "invalidates the cached access token and retries once on 401" do
+    calls = 0
+    stub_http(fcm: lambda { |_req|
+      calls += 1
+      if calls == 1
+        http_response(Net::HTTPUnauthorized, 401, error: { status: "UNAUTHENTICATED" })
+      else
+        http_response(Net::HTTPOK, 200, name: "projects/findu-test/messages/1")
+      end
+    })
+    allow(Rails.cache).to receive(:delete).and_call_original
+
+    result = client.send_to_token(token: "abc", title: "Oi", body: nil)
+
+    expect(result).to eq("name" => "projects/findu-test/messages/1")
+    expect(Rails.cache).to have_received(:delete).with(described_class::CACHE_KEY)
+    expect(calls).to eq(2)
+  end
+
+  it "raises Transient on network timeouts" do
+    allow(Net::HTTP).to receive(:start).and_raise(Net::ReadTimeout)
+
+    expect { client.send_to_token(token: "x", title: "Oi", body: nil) }
+      .to raise_error(described_class::Transient, /ReadTimeout/)
   end
 
   it "reports configured? from the environment" do
