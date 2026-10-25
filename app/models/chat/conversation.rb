@@ -53,6 +53,17 @@ module Chat
       update!(archived_at: Time.current)
     end
 
+    # Broadcasts a conversation snapshot to every session of the owner.
+    # @param [String] type
+    # @return [void]
+    def broadcast_inbox!(type = "conversation.upserted")
+      Chat::InboxChannel.broadcast_to(
+        user,
+        type:         type,
+        conversation: ::V1::Chat::ConversationSerializer.render_as_hash(self, view: :default)
+      )
+    end
+
     # Broadcasts a message snapshot to subscribers of this conversation channel.
     # @param [Chat::Message] message
     # @return [void]

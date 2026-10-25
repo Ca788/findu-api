@@ -31,6 +31,7 @@ module Api
 
         def create
           conversation = @user.chat_conversations.create!(conversation_params.to_h.symbolize_keys)
+          conversation.broadcast_inbox!
 
           render json: ApiResponseSerializer.render(
             conversation,
@@ -43,6 +44,7 @@ module Api
         def update
           conversation = @user.chat_conversations.find(params[:id])
           conversation.update!(conversation_params.to_h.symbolize_keys)
+          conversation.broadcast_inbox!
 
           render json: ApiResponseSerializer.render(
             conversation,
@@ -54,7 +56,10 @@ module Api
 
         def destroy
           conversation = @user.chat_conversations.find(params[:id])
-          conversation.archive! unless conversation.archived?
+          unless conversation.archived?
+            conversation.archive!
+            conversation.broadcast_inbox!("conversation.archived")
+          end
 
           render json: ApiResponseSerializer.render(
             {},

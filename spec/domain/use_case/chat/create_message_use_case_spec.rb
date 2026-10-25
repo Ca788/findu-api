@@ -37,6 +37,18 @@ RSpec.describe UseCase::Chat::CreateMessageUseCase do
         expect(timings["enqueued_at"]).to be_present
         expect(timings["create_ms"]).to be_a(Integer)
       end
+
+      it "broadcasts the conversation to the inbox when the first title is set" do
+        untitled = create(:chat_conversation, user: user, title: nil)
+
+        expect(Chat::InboxChannel).to receive(:broadcast_to).with(
+          user,
+          hash_including(type: "conversation.upserted", conversation: hash_including(id: untitled.id))
+        )
+
+        use_case.call(conversation: untitled, user: user, body: "gastei 50 no mercado")
+        expect(untitled.reload.title).to eq("gastei 50 no mercado")
+      end
     end
 
     context "when body, audio and attachments are all blank" do

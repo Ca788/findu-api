@@ -66,6 +66,9 @@ class UseCase::Chat::CreateMessageUseCase
         "Anexo"
       end
 
-    conversation.update!(title: title) if title.present?
+    return if title.blank?
+
+    conversation.update!(title: title)
+    conversation.broadcast_inbox!
   end
 end
