@@ -27,3 +27,25 @@ materialize_future_entries:
   class: "Financial::MaterializeFutureEntriesJob"
   queue: default
   description: "Materializa recorrências futuras e conclui parcelamentos quitados."
+
+purge_stale_device_tokens:
+  cron: "<%= ENV.fetch('PURGE_DEVICE_TOKENS_CRON', '0 4 * * 0') %>"
+  class: "Notifications::PurgeStaleDeviceTokensJob"
+  queue: default
+  description: "Remove device tokens sem atividade há 60 dias."
+
+notify_daily_register_morning:
+  cron: "<%= ENV.fetch('NOTIFY_DAILY_REGISTER_MORNING_CRON', '0 8 * * * America/Sao_Paulo') %>"
+  class: "Notifications::NotifyDailyRegisterJob"
+  queue: default
+  args:
+    - morning
+  description: "Lembrete das 8h para planejar o dia e registrar despesas."
+
+notify_daily_register_noon:
+  cron: "<%= ENV.fetch('NOTIFY_DAILY_REGISTER_NOON_CRON', '0 12 * * * America/Sao_Paulo') %>"
+  class: "Notifications::NotifyDailyRegisterJob"
+  queue: default
+  args:
+    - noon
+  description: "Lembrete das 12h para registrar as despesas da manhã."
