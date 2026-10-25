@@ -23,27 +23,21 @@ module Notifications
 
     def perform(notification_id)
       notification = Notification.find_by(id: notification_id)
-      return unless notification&.channels&.include?("push")
+      return unless deliverable?(notification)
 
-      client = Push::FcmClient.new
       notification.user.device_tokens.find_each do |device|
-        deliver(client, device, notification)
+        PushDeviceDeliveryJob.perform_later(notification.id, device.id)
       end
     end
 
     private
 
-    def deliver(client, device, notification)
-      client.send_to_token(
-        token: device.token,
-        title: notification.title,
-        body:  notification.body,
-        data:  notification.data.merge(notification_id: notification.id, kind: notification.kind)
-      )
-    rescue Push::FcmClient::Unregistered
-      device.destroy
-    rescue Push::FcmClient::Error => e
-      Rails.logger.warn("[push] #{device.platform} #{notification.kind} failed: #{e.message}")
+    def deliverable?(notification)
+      return false unless notification&.channels&.include?("push")
+      return false if notification.read?
+      return false unless notification.user.notification_enabled?(notification.group, "push")
+
+      true
     end
   end
 end

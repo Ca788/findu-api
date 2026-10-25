@@ -7,11 +7,9 @@ RSpec.describe Notifications::PushDeliveryJob do
 
   let(:user)         { create(:user) }
   let(:notification) { create(:notification, user: user, channels: %w[in_app push]) }
-  let(:client)       { instance_double(Push::FcmClient) }
 
   before do
     allow(Push::FcmClient).to receive(:configured?).and_return(true)
-    allow(Push::FcmClient).to receive(:new).and_return(client)
   end
 
   describe ".deliver_at" do
@@ -51,39 +49,38 @@ RSpec.describe Notifications::PushDeliveryJob do
   end
 
   describe "#perform" do
-    it "sends to every device of the user with route data" do
+    it "enqueues one device job per user device" do
       first  = create(:device_token, user: user)
       second = create(:device_token, user: user)
       create(:device_token)
 
-      expect(client).to receive(:send_to_token).with(
-        hash_including(token: first.token, title: notification.title, data: hash_including("route" => "/statements/detail", kind: "entry_due_today"))
-      )
-      expect(client).to receive(:send_to_token).with(hash_including(token: second.token))
-
-      described_class.perform_now(notification.id)
-    end
-
-    it "removes tokens rejected as unregistered and keeps going" do
-      dead  = create(:device_token, user: user)
-      alive = create(:device_token, user: user)
-
-      allow(client).to receive(:send_to_token).with(hash_including(token: dead.token)).and_raise(Push::FcmClient::Unregistered, "UNREGISTERED")
-      allow(client).to receive(:send_to_token).with(hash_including(token: alive.token)).and_return({})
-
-      described_class.perform_now(notification.id)
-
-      expect(DeviceToken.exists?(dead.id)).to be(false)
-      expect(DeviceToken.exists?(alive.id)).to be(true)
+      expect { described_class.perform_now(notification.id) }
+        .to have_enqueued_job(Notifications::PushDeviceDeliveryJob).with(notification.id, first.id)
+        .and have_enqueued_job(Notifications::PushDeviceDeliveryJob).with(notification.id, second.id)
     end
 
     it "skips notifications without the push channel" do
       create(:device_token, user: user)
       in_app_only = create(:notification, user: user, channels: %w[in_app])
 
-      expect(client).not_to receive(:send_to_token)
+      expect { described_class.perform_now(in_app_only.id) }
+        .not_to have_enqueued_job(Notifications::PushDeviceDeliveryJob)
+    end
 
-      described_class.perform_now(in_app_only.id)
+    it "skips notifications already read" do
+      create(:device_token, user: user)
+      read = create(:notification, :read, user: user, channels: %w[in_app push])
+
+      expect { described_class.perform_now(read.id) }
+        .not_to have_enqueued_job(Notifications::PushDeviceDeliveryJob)
+    end
+
+    it "skips when the user disabled push for the group" do
+      create(:device_token, user: user)
+      user.update!(settings: { "notifications" => { "groups" => { "entries_due" => { "push" => false } } } })
+
+      expect { described_class.perform_now(notification.id) }
+        .not_to have_enqueued_job(Notifications::PushDeviceDeliveryJob)
     end
   end
 end

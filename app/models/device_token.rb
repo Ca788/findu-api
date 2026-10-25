@@ -5,13 +5,22 @@ class DeviceToken < ApplicationRecord
 
   belongs_to :user
 
-  validates :token, presence: true, uniqueness: true, length: { maximum: 4096 }
+  validates :token, presence: true, length: { maximum: 4096 }
   validates :platform, inclusion: { in: PLATFORMS }
 
   def self.register(user:, token:, platform:)
-    record = find_or_initialize_by(token: token)
-    record.assign_attributes(user: user, platform: platform, last_seen_at: Time.current)
-    record.save!
-    record
+    candidate = new(user: user, token: token, platform: platform, last_seen_at: Time.current)
+    candidate.validate!
+
+    upsert(
+      {
+        user_id:      candidate.user_id,
+        token:        candidate.token,
+        platform:     candidate.platform,
+        last_seen_at: candidate.last_seen_at
+      },
+      unique_by: :token
+    )
+    find_by!(token: candidate.token)
   end
 end
