@@ -17,6 +17,7 @@ class Notification < ApplicationRecord
     budget_exceeded:       GROUPS[:budgets],
     insights_ready:        GROUPS[:insights],
     installment_completed: GROUPS[:installments],
+    installment_ending:    GROUPS[:installments],
     idle_reminder:         GROUPS[:reminders],
     daily_register:        GROUPS[:reminders]
   }.freeze

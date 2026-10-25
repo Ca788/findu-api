@@ -16,6 +16,12 @@ notify_due_entries:
   queue: default
   description: "Notifica contas que vencem hoje, nos próximos 3 dias ou já atrasadas."
 
+notify_ending_installments:
+  cron: "<%= ENV.fetch('NOTIFY_ENDING_INSTALLMENTS_CRON', '0 8 * * * America/Sao_Paulo') %>"
+  class: "Notifications::NotifyEndingInstallmentsJob"
+  queue: default
+  description: "Notifica parcelamentos com 1 ou 2 parcelas restantes."
+
 notify_idle_users:
   cron: "<%= ENV.fetch('NOTIFY_IDLE_USERS_CRON', '0 10 * * 1') %>"
   class: "Notifications::NotifyIdleUsersJob"
