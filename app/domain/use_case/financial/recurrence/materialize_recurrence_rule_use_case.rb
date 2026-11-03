@@ -57,6 +57,6 @@ class UseCase::Financial::Recurrence::MaterializeRecurrenceRuleUseCase
   def occurred_at_for(rule, competency)
     day = rule.day_of_month || rule.starts_on.day
     max_day = Date.civil(competency.year, competency.month, -1).day
-    Date.new(competency.year, competency.month, [day, max_day].min).to_time
+    Date.new(competency.year, competency.month, [day, max_day].min).in_time_zone.noon
   end
 end
