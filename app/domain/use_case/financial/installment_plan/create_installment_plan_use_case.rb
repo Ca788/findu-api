@@ -48,7 +48,7 @@ class UseCase::Financial::InstallmentPlan::CreateInstallmentPlanUseCase
         description:        installment_description(plan, n),
         category_id:        plan.category_id,
         competency_month:   competency,
-        occurred_at:        competency.to_time,
+        occurred_at:        competency.in_time_zone.noon,
         installment_number: n,
         status:             "pending"
       )
